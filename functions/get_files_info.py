@@ -25,4 +25,4 @@ def get_files_info(working_directory: str, directory: str = ".") -> str:
 
         return files_info
     except Exception as e:
-        print(f'Error listing dir contents: {e}')
+        return f'Error listing dir contents: {e}'
