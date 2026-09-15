@@ -1,10 +1,13 @@
 import os
+import sys
 import argparse
+import json
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from prompts import system_prompt
 from call_function import available_functions, call_function
-import json
+from config import MAX_ITERS
 
 
 def main():
@@ -32,14 +35,25 @@ def main():
     ]
     if args.verbose:
         print(f"User prompt: {args.user_prompt}")
-    generate_content(client, messages, args.verbose)
+
+    for _ in range(MAX_ITERS):
+        try:
+            final_response = generate_content(client, messages, args.verbose)
+            if final_response:
+                print(f"Response: {final_response}")
+                return
+        except Exception as e:
+            print(f"Error generating content {e}")
+
+    print(f"Maximum number of iterations({MAX_ITERS}) reached...")
+    sys.exit(1)
 
 
 def generate_content(
         client: OpenAI,
         messages: list[dict],
         verbose: bool = False
-        ) -> None:
+        ) -> str | None:
     response = client.chat.completions.create(
         model="openrouter/free",
         messages=messages,
@@ -52,7 +66,11 @@ def generate_content(
         print(f"Response tokens: {response.usage.completion_tokens}")
 
     response = response.choices[0].message
-    print(f"Response: {response.content}")
+    messages.append(response)
+
+    if not response.tool_calls:
+        return response.content
+
     for tool_call in response.tool_calls:
         function_args = json.loads(tool_call.function.arguments or "{}")
         print(f"Calling function: {tool_call.function.name}({function_args})")
@@ -61,8 +79,12 @@ def generate_content(
 
         if result_message['content'] == "":
             raise Exception("Error: Empty result")
+
+        messages.append(result_message)
+
         if verbose:
             print(f"-> {result_message['content']}")
+    return None
 
 
 if __name__ == "__main__":
